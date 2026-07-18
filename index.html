@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Polycentric Paradox — Singapore's HDB price gradient</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #111210;
+    color: #e8e6df;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 100vh;
+    padding: 28px 32px 40px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: #7a7870;
+    margin-bottom: 18px;
+    letter-spacing: 0.01em;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .btn {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #3a3835;
+    background: transparent;
+    color: #9a9890;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+  }
+
+  .btn.active {
+    background: #1e1e1c;
+    color: #e8e6df;
+    border-color: #555450;
+  }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: #1a1a18;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: #6a6865;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .stat-val {
+    font-size: 22px;
+    font-weight: 500;
+    color: #e8e6df;
+    letter-spacing: -0.01em;
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 420px;
+    margin-bottom: 20px;
+  }
+
+  canvas { display: block; }
+
+  .tooltip-box {
+    position: absolute;
+    background: #222220;
+    border: 1px solid #3a3835;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #e8e6df;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s;
+    z-index: 10;
+    min-width: 160px;
+    white-space: nowrap;
+  }
+
+  .tooltip-box .tt-name {
+    font-weight: 500;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .tooltip-box .tt-rc {
+    color: #e66767;
+    font-size: 11px;
+    margin-top: 3px;
+  }
+
+  .tooltip-box .tt-line {
+    color: #7a7870;
+    font-size: 12px;
+    margin-top: 1px;
+  }
+
+  .legend-row {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .leg-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: #9a9890;
+  }
+
+  .leg-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .leg-line {
+    width: 24px;
+    height: 2.5px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .leg-dashed {
+    width: 24px;
+    height: 0;
+    border-top: 2.5px dashed #1baf7a;
+    flex-shrink: 0;
+  }
+
+  .interp-box {
+    border-left: 3px solid #2a78d6;
+    padding: 12px 16px;
+    background: #161614;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    color: #9a9890;
+    line-height: 1.6;
+    transition: border-color 0.3s;
+  }
+
+  .interp-box b { color: #e8e6df; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<p class="subtitle">HDB median resale prices vs distance from CBD (Raffles Place). Estimates based on known spatial patterns.</p>
+
+<div class="btn-row">
+  <button class="btn active" id="btnMono" onclick="setView('mono')">Monocentric model</button>
+  <button class="btn" id="btnPoly" onclick="setView('poly')">Polycentric comparison</button>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card"><div class="stat-label">Model</div><div class="stat-val" id="sModel">Monocentric</div></div>
+  <div class="stat-card"><div class="stat-label">R² fit</div><div class="stat-val" id="sR2">0.879</div></div>
+  <div class="stat-card"><div class="stat-label">Price drop / km</div><div class="stat-val" id="sDrop">–$9.1k</div></div>
+  <div class="stat-card"><div class="stat-label">Towns analysed</div><div class="stat-val">26</div></div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart" role="img" aria-label="Scatter chart of Singapore HDB towns showing median resale price vs distance from CBD"></canvas>
+  <div class="tooltip-box" id="tt">
+    <div class="tt-name" id="ttName"></div>
+    <div class="tt-line" id="ttDist"></div>
+    <div class="tt-line" id="ttPrice"></div>
+    <div class="tt-rc" id="ttRc"></div>
+  </div>
+</div>
+
+<div class="legend-row" id="legendRow">
+  <span class="leg-item"><span class="leg-dot" style="background:#3987e5"></span>Regular town</span>
+  <span class="leg-item"><span class="leg-dot" style="background:#e66767"></span>Regional centre</span>
+  <span class="leg-item"><span class="leg-line" style="background:#3987e5"></span>Monocentric fit</span>
+  <span class="leg-item" id="legPoly" style="display:none"><span class="leg-dashed"></span>Polycentric fit</span>
+</div>
+
+<div class="interp-box" id="interpBox">
+  <span id="interpText">The monocentric model explains <b>88%</b> of price variation. Prices fall roughly <b>$9,100 per km</b> from Raffles Place — a textbook Alonso-Muth-Mills gradient. Distance to the CBD alone is doing almost all the work.</span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+// x = km from CBD (Raffles Place), y = median HDB resale price ($k),
+// z = km to nearest regional centre, rc = is itself a regional centre
+const towns = [
+  {name:"Queenstown",    x:3.2,  y:598, z:11.2, rc:false},
+  {name:"Buona Vista",   x:4.1,  y:572, z:10.4, rc:false},
+  {name:"Toa Payoh",     x:4.4,  y:555, z:14.2, rc:false},
+  {name:"Bishan",        x:7.5,  y:530, z:11.0, rc:false},
+  {name:"Marine Parade", x:5.2,  y:548, z:13.5, rc:false},
+  {name:"Clementi",      x:8.2,  y:520, z:6.3,  rc:false},
+  {name:"Ang Mo Kio",    x:9.1,  y:495, z:9.8,  rc:false},
+  {name:"Serangoon",     x:8.8,  y:500, z:10.2, rc:false},
+  {name:"Bedok",         x:11.4, y:468, z:7.2,  rc:false},
+  {name:"Tampines",      x:18.5, y:460, z:0.0,  rc:true },
+  {name:"Jurong East",   x:14.2, y:442, z:0.0,  rc:true },
+  {name:"Hougang",       x:13.0, y:450, z:6.8,  rc:false},
+  {name:"Pasir Ris",     x:22.0, y:415, z:4.2,  rc:false},
+  {name:"Yishun",        x:20.3, y:398, z:6.1,  rc:false},
+  {name:"Choa Chu Kang", x:18.8, y:410, z:6.5,  rc:false},
+  {name:"Woodlands",     x:25.6, y:375, z:0.0,  rc:true },
+  {name:"Sembawang",     x:26.8, y:362, z:2.8,  rc:false},
+  {name:"Bukit Panjang", x:16.5, y:430, z:5.8,  rc:false},
+  {name:"Sengkang",      x:16.2, y:435, z:4.5,  rc:false},
+  {name:"Punggol",       x:19.5, y:418, z:4.8,  rc:false},
+  {name:"Jurong West",   x:17.0, y:385, z:4.2,  rc:false},
+  {name:"Geylang",       x:4.8,  y:490, z:14.0, rc:false},
+  {name:"Kallang",       x:3.8,  y:560, z:15.2, rc:false},
+  {name:"Bukit Merah",   x:4.0,  y:565, z:11.8, rc:false},
+  {name:"Bukit Batok",   x:14.8, y:422, z:4.1,  rc:false},
+  {name:"Tengah",        x:17.5, y:390, z:5.0,  rc:false},
+];
+
+function linReg(xs, ys) {
+  const n = xs.length;
+  const mx = xs.reduce((a,b)=>a+b,0)/n;
+  const my = ys.reduce((a,b)=>a+b,0)/n;
+  const num = xs.reduce((s,x,i)=>s+(x-mx)*(ys[i]-my),0);
+  const den = xs.reduce((s,x)=>s+(x-mx)**2,0);
+  const slope = num/den, intercept = my-slope*mx;
+  const yhat = xs.map(x=>slope*x+intercept);
+  const ssRes = ys.reduce((s,y,i)=>s+(y-yhat[i])**2,0);
+  const ssTot = ys.reduce((s,y)=>s+(y-my)**2,0);
+  return {slope, intercept, r2: 1-ssRes/ssTot};
+}
+
+// Solve a 3x3 linear system by Gaussian elimination with partial pivoting.
+function solve3(A, b) {
+  const M = A.map((r,i)=>[...r, b[i]]);
+  for(let col=0; col<3; col++){
+    let piv = col;
+    for(let r=col+1; r<3; r++) if(Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    const d = M[col][col];
+    for(let j=col; j<4; j++) M[col][j] /= d;
+    for(let r=0; r<3; r++) if(r!==col){ const f = M[r][col]; for(let j=col; j<4; j++) M[r][j] -= f*M[col][j]; }
+  }
+  return [M[0][3], M[1][3], M[2][3]];
+}
+
+// Ordinary least squares for y ~ 1 + x + z  (matches the Python np.linalg.lstsq model).
+function multiReg(xs, zs, ys) {
+  const n = xs.length;
+  const S = [[0,0,0],[0,0,0],[0,0,0]], T = [0,0,0];
+  for(let i=0; i<n; i++){
+    const row = [1, xs[i], zs[i]];
+    for(let a=0; a<3; a++){ T[a] += row[a]*ys[i]; for(let b=0; b<3; b++) S[a][b] += row[a]*row[b]; }
+  }
+  const c = solve3(S, T);
+  const my = ys.reduce((a,b)=>a+b,0)/n;
+  const yhat = xs.map((x,i)=>c[0] + c[1]*x + c[2]*zs[i]);
+  const ssRes = ys.reduce((s,y,i)=>s+(y-yhat[i])**2, 0);
+  const ssTot = ys.reduce((s,y)=>s+(y-my)**2, 0);
+  return { c0:c[0], bCbd:c[1], bRc:c[2], r2: 1-ssRes/ssTot };
+}
+
+const xs = towns.map(t=>t.x), ys = towns.map(t=>t.y), zs = towns.map(t=>t.z);
+const mono = linReg(xs, ys);          // Model 1: monocentric
+const poly = multiReg(xs, zs, ys);    // Model 2: polycentric
+const zMean = zs.reduce((a,b)=>a+b,0)/zs.length;
+
+const xPts = 120;
+const xArr = Array.from({length:xPts},(_,i)=>1+i*28/(xPts-1));
+const monoY = xArr.map(x=>mono.slope*x+mono.intercept);
+// Polycentric fitted line, holding distance-to-regional-centre at its mean (as in the Python 2D slice).
+const polyY = xArr.map(x=>poly.c0 + poly.bCbd*x + poly.bRc*zMean);
+
+const R2_MONO = mono.r2, R2_POLY = poly.r2;
+const fmtR2   = r => r.toFixed(3);
+const fmtDrop = s => '–$' + Math.abs(s).toFixed(1) + 'k';
+let view = 'mono';
+let polyProgress = 0, animFrame = null;
+
+const BLUE = '#3987e5', RED = '#e66767', GREEN = '#1baf7a';
+const GRID = '#2a2a28', AXIS = '#3a3835', TICK = '#6a6865';
+
+const ctx = document.getElementById('chart').getContext('2d');
+
+const scatterRegular = {
+  type:'scatter', label:'Regular town',
+  data: towns.filter(t=>!t.rc).map(t=>({x:t.x,y:t.y,name:t.name,rc:false})),
+  backgroundColor: BLUE, pointRadius: 6, pointHoverRadius: 8,
+  pointStyle:'circle', order:3
+};
+
+const scatterRC = {
+  type:'scatter', label:'Regional centre',
+  data: towns.filter(t=>t.rc).map(t=>({x:t.x,y:t.y,name:t.name,rc:true})),
+  backgroundColor: RED, pointRadius: 7, pointHoverRadius: 9,
+  pointStyle:'circle', order:4
+};
+
+const monoLine = {
+  type:'line', label:'Monocentric fit',
+  data: xArr.map((x,i)=>({x,y:monoY[i]})),
+  borderColor: BLUE, borderWidth: 2, pointRadius: 0, fill:false, order:2, tension:0
+};
+
+const polyLine = {
+  type:'line', label:'Polycentric fit',
+  data: xArr.map((x,i)=>({x,y:polyY[i]})),
+  borderColor: GREEN, borderWidth: 2.2, borderDash:[7,5],
+  pointRadius:0, fill:false, order:1, tension:0,
+  borderCapStyle:'round'
+};
+
+const chart = new Chart(ctx, {
+  data: { datasets: [scatterRegular, scatterRC, monoLine] },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 0 },
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false }
+    },
+    scales: {
+      x: {
+        type:'linear', min:1, max:29,
+        title:{ display:true, text:'Distance from CBD — Raffles Place (km)', color:TICK, font:{size:12} },
+        grid:{ color:GRID, lineWidth:0.8 },
+        ticks:{ color:TICK, stepSize:4, font:{size:11} },
+        border:{ color:AXIS }
+      },
+      y: {
+        min:310, max:650,
+        title:{ display:true, text:'Median resale price (SGD $k)', color:TICK, font:{size:12} },
+        grid:{ color:GRID, lineWidth:0.8 },
+        ticks:{ color:TICK, callback:v=>'$'+v+'k', font:{size:11} },
+        border:{ color:AXIS }
+      }
+    },
+    onHover(evt) {
+      const pts = chart.getElementsAtEventForMode(evt,'nearest',{radius:18},false);
+      const tt = document.getElementById('tt');
+      const wrap = document.querySelector('.chart-wrap');
+      if(!pts.length){ tt.style.opacity=0; return; }
+      const el = pts[0];
+      const ds = chart.data.datasets[el.datasetIndex];
+      const pt = ds.data[el.index];
+      if(!pt.name){ tt.style.opacity=0; return; }
+      document.getElementById('ttName').textContent = pt.name;
+      document.getElementById('ttDist').textContent = 'Distance: '+pt.x.toFixed(1)+' km';
+      document.getElementById('ttPrice').textContent = 'Median price: $'+pt.y+'k';
+      document.getElementById('ttRc').textContent = pt.rc ? '★ Regional centre' : '';
+      const rect = wrap.getBoundingClientRect();
+      const canRect = ctx.canvas.getBoundingClientRect();
+      let lx = canRect.left - rect.left + chart.getDatasetMeta(el.datasetIndex).data[el.index].x + 14;
+      let ly = canRect.top  - rect.top  + chart.getDatasetMeta(el.datasetIndex).data[el.index].y - 10;
+      if(lx+180 > wrap.offsetWidth) lx -= 175;
+      tt.style.left = lx+'px';
+      tt.style.top  = ly+'px';
+      tt.style.opacity = 1;
+    }
+  }
+});
+
+document.querySelector('.chart-wrap').addEventListener('mouseleave',()=>{
+  document.getElementById('tt').style.opacity=0;
+});
+
+function animatePoly() {
+  if(polyProgress >= 1){ polyProgress=1; return; }
+  polyProgress = Math.min(1, polyProgress + 0.045);
+  const n = Math.max(2, Math.round(polyProgress * xArr.length));
+  polyLine.data = xArr.slice(0,n).map((x,i)=>({x,y:polyY[i]}));
+  chart.data.datasets = [scatterRegular, scatterRC, monoLine, polyLine];
+  chart.update('none');
+  if(polyProgress < 1) animFrame = requestAnimationFrame(animatePoly);
+}
+
+function animatePoints() {
+  let frame = 0;
+  const total = 30;
+  const allPts = [
+    ...towns.filter(t=>!t.rc).map(t=>({x:t.x,y:t.y,name:t.name,rc:false})),
+    ...towns.filter(t=>t.rc).map(t=>({x:t.x,y:t.y,name:t.name,rc:true}))
+  ].sort((a,b)=>a.x-b.x);
+
+  function step() {
+    frame++;
+    const progress = frame/total;
+    const count = Math.round(progress * allPts.length);
+    const reg = allPts.filter((_,i)=>i<count&&!allPts[i].rc);
+    const rc  = allPts.filter((_,i)=>i<count&&allPts[i].rc);
+    scatterRegular.data = reg;
+    scatterRC.data = rc;
+    chart.update('none');
+    if(frame < total) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function setView(v) {
+  if(v === view) return;
+  view = v;
+
+  document.getElementById('btnMono').classList.toggle('active', v==='mono');
+  document.getElementById('btnPoly').classList.toggle('active', v==='poly');
+  document.getElementById('legPoly').style.display = v==='poly' ? 'flex' : 'none';
+  document.getElementById('interpBox').style.borderLeftColor = v==='mono' ? '#2a78d6' : '#1baf7a';
+
+  if(v==='mono'){
+    document.getElementById('sModel').textContent='Monocentric';
+    document.getElementById('sR2').textContent=fmtR2(R2_MONO);
+    document.getElementById('sDrop').textContent=fmtDrop(mono.slope);
+    document.getElementById('interpText').innerHTML='The monocentric model explains <b>'+Math.round(R2_MONO*100)+'%</b> of price variation. Prices fall roughly <b>$'+(Math.round(Math.abs(mono.slope*1000)/100)*100).toLocaleString('en-US')+' per km</b> from Raffles Place — a textbook Alonso-Muth-Mills gradient. Distance to the CBD alone is doing almost all the work.';
+    if(animFrame) cancelAnimationFrame(animFrame);
+    chart.data.datasets = [scatterRegular, scatterRC, monoLine];
+    chart.update('none');
+  } else {
+    const dR2 = R2_POLY - R2_MONO;
+    document.getElementById('sModel').textContent='Polycentric';
+    document.getElementById('sR2').textContent=fmtR2(R2_POLY);
+    document.getElementById('sDrop').textContent=fmtDrop(poly.bCbd);
+    document.getElementById('interpText').innerHTML='Adding distance to the nearest regional centre barely moves the fit: R² goes <b>'+fmtR2(R2_MONO)+' → '+fmtR2(R2_POLY)+'</b> (ΔR² ≈ '+(dR2>=0?'+':'')+dR2.toFixed(3)+'). Its coefficient is negligible (~$'+Math.abs(poly.bRc*1000).toLocaleString('en-US',{maximumFractionDigits:0})+'/km). Despite decades of deliberate decentralisation, HDB resale prices stay <b>strongly monocentric</b> — the Raffles Place gradient still rules.';
+    polyProgress = 0;
+    polyLine.data = [];
+    chart.data.datasets = [scatterRegular, scatterRC, monoLine, polyLine];
+    chart.update('none');
+    animFrame = requestAnimationFrame(animatePoly);
+  }
+}
+
+// Populate the monocentric stat cards from the computed regression on load.
+document.getElementById('sR2').textContent = fmtR2(R2_MONO);
+document.getElementById('sDrop').textContent = fmtDrop(mono.slope);
+document.getElementById('interpText').innerHTML = 'The monocentric model explains <b>'+Math.round(R2_MONO*100)+'%</b> of price variation. Prices fall roughly <b>$'+(Math.round(Math.abs(mono.slope*1000)/100)*100).toLocaleString('en-US')+' per km</b> from Raffles Place — a textbook Alonso-Muth-Mills gradient. Distance to the CBD alone is doing almost all the work.';
+
+animatePoints();
+</script>
+</body>
+</html>
